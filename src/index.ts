@@ -44,15 +44,16 @@ app.use((req, _res, next) => {
   next();
 });
 
-// ── Unified Callback Endpoint ───────────────────────────────────────
+// ── Event Subscription ───────────────────────────────────────────────
+// 飞书后台「事件与回调」→「事件配置」→ 请求网址 URL
 
-app.post("/callback", async (req, res) => {
+app.post("/event", async (req, res) => {
   const body = req.body;
 
-  // 1. URL verification (first-time event subscription setup)
+  // 1. URL verification (飞书首次配置时发 challenge 验证)
   if ((body as UrlVerification).type === "url_verification") {
     const challenge = (body as UrlVerification).challenge;
-    console.log(`[callback] URL verification challenge: ${challenge}`);
+    console.log(`[event] URL verification challenge: ${challenge}`);
     res.json({ challenge });
     return;
   }
@@ -62,26 +63,63 @@ app.post("/callback", async (req, res) => {
   const eventType = wrapper.header?.event_type;
 
   if (!eventType) {
-    console.log("[callback] Unknown request, no event_type");
+    console.log("[event] Unknown request, no event_type");
     res.sendStatus(200);
     return;
   }
 
-  console.log(`[callback] event_type: ${eventType}`);
+  console.log(`[event] event_type: ${eventType}`);
 
   switch (eventType) {
-    // ── Message event: bot @mentioned in group ───────────────────
     case "im.message.receive_v1":
       handleMessageEvent(wrapper, res);
       break;
+    default:
+      console.log(`[event] Unhandled event_type: ${eventType}`);
+      res.sendStatus(200);
+  }
+});
 
-    // ── Card action: user clicked button or selected dropdown ────
-    case "card.action.trigger":
-      await handleCardAction(wrapper, res);
+// ── Card Action Callback ────────────────────────────────────────────
+// 飞书后台「事件与回调」→「回调配置」→「消息卡片请求网址」
+
+app.post("/callback", async (req, res) => {
+  const body = req.body as CardActionCallback;
+
+  const key = body?.action?.value?.key;
+  console.log(
+    `[card] action=${body?.action?.tag} key=${key} open_message_id=${body?.open_message_id} user=${body?.open_id}`
+  );
+
+  if (!key) {
+    console.log("[card] Skipped: no action key");
+    res.sendStatus(200);
+    return;
+  }
+
+  switch (key) {
+    case "branch_select": {
+      const branch = parseOption(body.action.option);
+      if (branch) {
+        setBranch(body.open_message_id, branch);
+        console.log(
+          `[card] Branch selected: "${branch}" → card ${body.open_message_id}`
+        );
+      }
+      res.sendStatus(200);
+      break;
+    }
+
+    case "only_build":
+      await handleBuildTrigger(res, body, true);
+      break;
+
+    case "build_release":
+      await handleBuildTrigger(res, body, false);
       break;
 
     default:
-      console.log(`[callback] Unhandled event_type: ${eventType}`);
+      console.log(`[card] Unhandled key: ${key}`);
       res.sendStatus(200);
   }
 });
@@ -178,51 +216,7 @@ async function handleReleaseCommand(chatId: string) {
   }
 }
 
-// ── Card Action Handler ────────────────────────────────────────────
-
-async function handleCardAction(
-  wrapper: FeishuEventWrapper,
-  res: express.Response
-) {
-  const cb = wrapper.event as CardActionCallback;
-
-  const key = cb?.action?.value?.key;
-  console.log(
-    `[card] action=${cb?.action?.tag} key=${key} open_message_id=${cb?.open_message_id} user=${cb?.open_id}`
-  );
-
-  if (!key) {
-    console.log("[card] Skipped: no action key");
-    res.sendStatus(200);
-    return;
-  }
-
-  switch (key) {
-    case "branch_select": {
-      const branch = parseOption(cb.action.option);
-      if (branch) {
-        setBranch(cb.open_message_id, branch);
-        console.log(
-          `[card] Branch selected: "${branch}" → card ${cb.open_message_id}`
-        );
-      }
-      res.sendStatus(200);
-      break;
-    }
-
-    case "only_build":
-      await handleBuildTrigger(res, cb, true);
-      break;
-
-    case "build_release":
-      await handleBuildTrigger(res, cb, false);
-      break;
-
-    default:
-      console.log(`[card] Unhandled key: ${key}`);
-      res.sendStatus(200);
-  }
-}
+// ── Card Build Trigger ──────────────────────────────────────────────
 
 async function handleBuildTrigger(
   res: express.Response,
@@ -300,6 +294,7 @@ app.listen(config.port, () => {
   console.log("  Feishu Release Bot");
   console.log("═══════════════════════════════════════════");
   console.log(`  Port:     ${config.port}`);
+  console.log(`  Event:    POST /event`);
   console.log(`  Callback: POST /callback`);
   console.log(`  Health:   GET  /health`);
   console.log("═══════════════════════════════════════════");
