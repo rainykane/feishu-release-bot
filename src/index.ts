@@ -76,7 +76,7 @@ app.post("/event", async (req, res) => {
       break;
     default:
       console.log(`[event] Unhandled event_type: ${eventType}`);
-      res.sendStatus(200);
+      res.json({});
   }
 });
 
@@ -84,43 +84,51 @@ app.post("/event", async (req, res) => {
 // 飞书后台「事件与回调」→「回调配置」→「消息卡片请求网址」
 
 app.post("/callback", async (req, res) => {
-  const body = req.body as CardActionCallback;
+  const body = req.body;
 
-  const key = body?.action?.value?.key;
+  // 飞书可能把卡片回调包在事件信封里发过来，先解包
+  const cb = unwrapCardAction(body);
+  if (!cb) {
+    console.log("[card] Skipped: cannot parse card action");
+    res.json({});
+    return;
+  }
+
+  const key = cb?.action?.value?.key;
   console.log(
-    `[card] action=${body?.action?.tag} key=${key} open_message_id=${body?.open_message_id} user=${body?.open_id}`
+    `[card] action=${cb?.action?.tag} key=${key} open_message_id=${cb?.open_message_id} user=${cb?.open_id}`
   );
 
   if (!key) {
     console.log("[card] Skipped: no action key");
-    res.sendStatus(200);
+    res.json({});
     return;
   }
 
   switch (key) {
     case "branch_select": {
-      const branch = parseOption(body.action.option);
+      const branch = parseOption(cb.action.option);
       if (branch) {
-        setBranch(body.open_message_id, branch);
+        setBranch(cb.open_message_id, branch);
         console.log(
-          `[card] Branch selected: "${branch}" → card ${body.open_message_id}`
+          `[card] Branch selected: "${branch}" → card ${cb.open_message_id}`
         );
       }
-      res.sendStatus(200);
+      res.json({});
       break;
     }
 
     case "only_build":
-      await handleBuildTrigger(res, body, true);
+      await handleBuildTrigger(res, cb, true);
       break;
 
     case "build_release":
-      await handleBuildTrigger(res, body, false);
+      await handleBuildTrigger(res, cb, false);
       break;
 
     default:
       console.log(`[card] Unhandled key: ${key}`);
-      res.sendStatus(200);
+      res.json({});
   }
 });
 
@@ -273,7 +281,29 @@ async function handleBuildTrigger(
   }
 }
 
-// ── Helper ─────────────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────────────
+
+// 飞书可能把卡片回调包在事件信封里，也可能直接发裸的
+// 两种格式都兼容：
+//   裸:  {"open_id":"...", "action":{...}}
+//   包:  {"schema":"2.0", "header":{"event_type":"card.action.trigger"}, "event":{裸格式}}
+function unwrapCardAction(body: any): CardActionCallback | null {
+  if (!body) return null;
+
+  // 信封格式 → 取 event 字段
+  const wrapper = body as FeishuEventWrapper;
+  if (wrapper.header?.event_type === "card.action.trigger" && wrapper.event) {
+    console.log("[card] Unwrapped from event envelope");
+    return wrapper.event as CardActionCallback;
+  }
+
+  // 裸格式 → 直接使用
+  if (body.action?.value?.key) {
+    return body as CardActionCallback;
+  }
+
+  return null;
+}
 
 function parseOption(option?: string): string | null {
   if (!option) return null;
