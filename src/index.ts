@@ -86,6 +86,14 @@ app.post("/event", async (req, res) => {
 app.post("/callback", async (req, res) => {
   const body = req.body;
 
+  // 飞书首次配置卡片回调 URL 时也会发 URL 验证
+  if ((body as UrlVerification).type === "url_verification") {
+    const challenge = (body as UrlVerification).challenge;
+    console.log(`[card] URL verification challenge: ${challenge}`);
+    res.json({ challenge });
+    return;
+  }
+
   // 飞书可能把卡片回调包在事件信封里发过来，先解包
   const cb = unwrapCardAction(body);
   if (!cb) {
