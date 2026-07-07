@@ -1,0 +1,61 @@
+// Feishu event types
+
+export interface FeishuEventWrapper {
+  schema: string;
+  header: { event_id: string; event_type: string; token?: string };
+  event: unknown;
+}
+
+export interface UrlVerification {
+  challenge: string;
+  token: string;
+  type: "url_verification";
+}
+
+export interface MessageEvent {
+  sender: { sender_id: { open_id: string } };
+  message: {
+    message_id: string;
+    chat_id: string;
+    chat_type: string;
+    message_type: string;
+    content: string; // JSON-encoded
+    mentions: Array<{ id: { open_id: string }; name: string }>;
+  };
+}
+
+export interface TextContent {
+  text: string;
+}
+
+// Card action callback types
+
+export interface CardActionCallback {
+  open_id: string;
+  open_message_id: string;
+  open_chat_id: string;
+  action: {
+    tag: string;
+    value: CardActionValue;
+    option?: string;
+  };
+}
+
+export interface CardActionValue {
+  key: "branch_select" | "only_build" | "build_release";
+}
+
+// Feishu API types
+
+export interface TenantTokenResponse {
+  code: number;
+  msg: string;
+  tenant_access_token: string;
+  expire: number;
+}
+
+// GitHub API types
+
+export interface GitHubBranch {
+  name: string;
+}
