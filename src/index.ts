@@ -134,6 +134,10 @@ app.post("/callback", async (req, res) => {
       await handleBuildTrigger(res, cb, false);
       break;
 
+    case "refresh_branches":
+      await handleRefreshBranches(res, cb);
+      break;
+
     default:
       console.log(`[card] Unhandled key: ${key}`);
       res.json({});
@@ -284,6 +288,41 @@ async function handleBuildTrigger(
       toast: {
         type: "error",
         content: `❌ Failed to trigger workflow: ${err.message}`,
+      },
+    });
+  }
+}
+
+async function handleRefreshBranches(
+  res: express.Response,
+  cb: CardActionCallback
+) {
+  console.log("[card] Refresh branches requested");
+  try {
+    const branches = await listBranches();
+    console.log(`[card] Got ${branches.length} branches`);
+
+    const cardStr = buildReleaseCard(branches);
+    const card = JSON.parse(cardStr);
+
+    const prevBranch = getBranch(cb.open_message_id);
+    if (prevBranch) {
+      setBranch(cb.open_message_id, prevBranch);
+    }
+
+    res.json({
+      card,
+      toast: {
+        type: "success",
+        content: `✅ Branches refreshed (${branches.length} total)`,
+      },
+    });
+  } catch (err: any) {
+    console.error(`[card] Refresh failed: ${err.message}`);
+    res.json({
+      toast: {
+        type: "error",
+        content: `❌ Failed to refresh branches: ${err.message}`,
       },
     });
   }

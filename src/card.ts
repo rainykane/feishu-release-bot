@@ -50,6 +50,18 @@ export function buildReleaseCard(branches: string[]): string {
           },
         ],
       },
+      { tag: "hr" },
+      {
+        tag: "action",
+        actions: [
+          {
+            tag: "button",
+            text: { tag: "plain_text", content: "🔄 Refresh Branches" },
+            type: "default",
+            value: { key: "refresh_branches" },
+          },
+        ],
+      },
       {
         tag: "note",
         elements: [
