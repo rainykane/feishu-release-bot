@@ -23,11 +23,10 @@ export function buildReleaseCard(
 
   const elements: any[] = [];
 
-  // Row 1: 项目: [dropdown]
+  // Row 1: project dropdown (label embedded in placeholder)
   const projectSelect: any = {
     tag: "select_static",
-    placeholder: { tag: "plain_text", content: "Choose a project" },
-    width: "fill",
+    placeholder: { tag: "plain_text", content: "项目: 请选择项目" },
     value: { key: "project_select" },
     options: projectOptions,
   };
@@ -35,83 +34,36 @@ export function buildReleaseCard(
     projectSelect.initial_option = selectedProject.name;
   }
   elements.push({
-    tag: "column_set",
-    flex_mode: "none",
-    columns: [
-      {
-        tag: "column",
-        width: "auto",
-        elements: [
-          {
-            tag: "div",
-            text: { tag: "lark_md", content: "**项目:**" },
-          },
-        ],
-      },
-      {
-        tag: "column",
-        width: "weighted",
-        weight: 1,
-        elements: [
-          {
-            tag: "action",
-            actions: [projectSelect],
-          },
-        ],
-      },
-    ],
+    tag: "action",
+    actions: [projectSelect],
   });
 
-  // Row 2: 分支: [dropdown] [刷新]
+  // Row 2: branch dropdown + refresh button (label embedded in placeholder)
   const branchPlaceholder =
     branches.length > 0
-      ? "Choose a branch"
+      ? "分支: 请选择分支"
       : selectedProject
-        ? "Loading branches..."
-        : "Choose a project first";
+        ? "分支: 加载中..."
+        : "分支: 请先选择项目";
 
-  const branchAction: any = {
-    tag: "select_static",
-    placeholder: { tag: "plain_text", content: branchPlaceholder },
-    width: "fill",
-    value: { key: "branch_select" },
-    options: branchOptions,
-  };
+  const branchActions: any[] = [
+    {
+      tag: "select_static",
+      placeholder: { tag: "plain_text", content: branchPlaceholder },
+      value: { key: "branch_select" },
+      options: branchOptions,
+    },
+    {
+      tag: "button",
+      text: { tag: "plain_text", content: "刷新" },
+      type: "default",
+      value: { key: "refresh_branches" },
+    },
+  ];
 
   elements.push({
-    tag: "column_set",
-    flex_mode: "none",
-    columns: [
-      {
-        tag: "column",
-        width: "auto",
-        elements: [
-          {
-            tag: "div",
-            text: { tag: "lark_md", content: "**分支:**" },
-          },
-        ],
-      },
-      {
-        tag: "column",
-        width: "weighted",
-        weight: 1,
-        elements: [
-          {
-            tag: "action",
-            actions: [
-              branchAction,
-              {
-                tag: "button",
-                text: { tag: "plain_text", content: "刷新" },
-                type: "default",
-                value: { key: "refresh_branches" },
-              },
-            ],
-          },
-        ],
-      },
-    ],
+    tag: "action",
+    actions: branchActions,
   });
 
   elements.push({ tag: "hr" });
