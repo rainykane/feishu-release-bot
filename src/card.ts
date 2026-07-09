@@ -65,7 +65,10 @@ export function buildReleaseCard(
   const buildActions: any[] = [
     {
       tag: "button",
-      text: { tag: "plain_text", content: "🔨 构建" },
+      text: {
+        tag: "plain_text",
+        content: selectedProject?.buttonText?.only_build ?? "🔨 构建",
+      },
       type: "primary",
       value: { key: "only_build" },
     },
@@ -74,7 +77,10 @@ export function buildReleaseCard(
   if (hasReleaseMode(selectedProject)) {
     buildActions.push({
       tag: "button",
-      text: { tag: "plain_text", content: "🚀 Build & Release" },
+      text: {
+        tag: "plain_text",
+        content: selectedProject?.buttonText?.build_release ?? "🚀 Build & Release",
+      },
       type: "danger",
       value: { key: "build_release" },
     });

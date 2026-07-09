@@ -81,4 +81,8 @@ export interface ProjectConfig {
     only_build?: Record<string, string>;
     build_release?: Record<string, string>;
   };
+  buttonText?: {
+    only_build?: string;
+    build_release?: string;
+  };
 }
