@@ -77,5 +77,8 @@ export interface ProjectConfig {
   owner: string;
   repo: string;
   workflowId: string;
-  inputs?: Record<string, string>; // custom workflow inputs, overrides default only_build_image/commit/image_tag
+  inputs?: {
+    only_build?: Record<string, string>;
+    build_release?: Record<string, string>;
+  };
 }

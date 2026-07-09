@@ -42,8 +42,13 @@ export async function triggerWorkflow(
 ): Promise<void> {
   const url = `${apiBase}/repos/${project.owner}/${project.repo}/actions/workflows/${project.workflowId}/dispatches`;
 
-  const inputs: Record<string, string> = project.inputs
-    ? { ...project.inputs }
+  const modeKey = buildOnly ? "only_build" : "build_release";
+  const modeInputs =
+    project.inputs?.[modeKey] ??
+    project.inputs?.only_build ??
+    project.inputs?.build_release;
+  const inputs: Record<string, string> = modeInputs
+    ? { ...modeInputs }
     : {
         only_build_image: String(buildOnly),
         commit: "",
