@@ -151,9 +151,9 @@ app.post("/callback", async (req, res) => {
 
       const cached = branchCache.get(projectName);
       if (cached) {
-        updateCardWithBranches(cb.token, projectName, cached);
+        updateCardWithBranches(cb.token, project, cached);
       } else {
-        fetchBranchesAndUpdateCardByToken(cb.token, projectName, project);
+        fetchBranchesAndUpdateCardByToken(cb.token, project);
       }
       break;
     }
@@ -254,7 +254,7 @@ function handleMessageEvent(
 
   console.log(`[message] Command text: "${text}"`);
 
-  const triggers = ["release", "/release", "打包", "/打包"];
+  const triggers = ["release", "/release", "打包", "/打包", "build"];
   if (!triggers.includes(text.toLowerCase())) {
     console.log(`[message] Skipped: not a trigger word`);
     res.sendStatus(200);
@@ -321,7 +321,7 @@ async function handleBuildTrigger(
     return;
   }
 
-  const modeStr = buildOnly ? "Only Build (image only)" : "Build & Release";
+  const modeStr = buildOnly ? "构建" : "构建与发布";
 
   try {
     console.log(
@@ -333,18 +333,9 @@ async function handleBuildTrigger(
     res.json({
       toast: {
         type: "success",
-        content: `✅ Workflow triggered! ${projectName} @ ${branch}, Mode: ${modeStr}`,
+        content: `✅ 已触发构建！${projectName} @ ${branch}`,
       },
     });
-
-    const msg = [
-      "🚀 Release workflow triggered!",
-      `Project: \`${projectName}\``,
-      `Branch: \`${branch}\``,
-      `Mode: ${modeStr}`,
-      `Check GitHub Actions: https://github.com/${project.owner}/${project.repo}/actions`,
-    ].join("\n");
-    sendText(cb.open_chat_id, msg);
 
     console.log(
       `[workflow] ✅ Dispatched: project=${projectName} branch=${branch} mode=${modeStr} user=${cb.open_id}`
@@ -356,11 +347,11 @@ async function handleBuildTrigger(
         await new Promise((r) => setTimeout(r, 6_000));
         const run = await getLatestRun(project, branch);
         if (run) {
-          setRunContext(run.id, cb.open_chat_id, cb.open_id, branch, modeStr);
+          setRunContext(run.id, cb.open_chat_id, cb.open_id, branch, projectName, modeStr);
           console.log(`[workflow] Stored run #${run.id} → chat ${cb.open_chat_id}`);
           sendText(
             cb.open_chat_id,
-            `⏳ Build started...\nProject: \`${projectName}\`\nBranch: \`${branch}\`\n${run.html_url}`
+            `开始构建: \`${projectName}\`\n项目: \`${projectName}\`\n分支: \`${branch}\`\n${run.html_url}`
           );
         }
       } catch (err: any) {
@@ -409,7 +400,7 @@ async function handleRefreshBranches(
   res.json({
     toast: { type: "info", content: "Refreshing branches..." },
   });
-  fetchBranchesAndUpdateCardByToken(cb.token, projectName, project);
+  fetchBranchesAndUpdateCardByToken(cb.token, project);
 }
 
 // ── GitHub Webhook ──────────────────────────────────────────────────
@@ -469,9 +460,9 @@ app.post("/webhook", (req, res) => {
     conclusion === "success" ? "✅" : conclusion === "failure" ? "❌" : "⚠️";
 
   const msg = [
-    `<at user_id="${ctx.openId}"></at> ${emoji} Build ${conclusion}!`,
-    `Branch: \`${ctx.branch}\``,
-    `Mode: ${ctx.modeStr}`,
+    `<at user_id="${ctx.openId}"></at> ${emoji} 构建${conclusion === "success" ? "成功" : "失败"}！`,
+    `项目: \`${ctx.projectName}\``,
+    `分支: \`${ctx.branch}\``,
     run.html_url,
   ].join("\n");
 
@@ -500,14 +491,13 @@ async function prefetchBranches(project: ProjectConfig) {
 
 async function fetchBranchesAndUpdateCardByToken(
   callbackToken: string,
-  projectName: string,
   project: ProjectConfig
 ) {
   try {
     const branches = await listBranches(project);
-    branchCache.set(projectName, branches);
-    console.log(`[card] Got ${branches.length} branches for ${projectName}`);
-    await updateCardWithBranches(callbackToken, projectName, branches);
+    branchCache.set(project.name, branches);
+    console.log(`[card] Got ${branches.length} branches for ${project.name}`);
+    await updateCardWithBranches(callbackToken, project, branches);
   } catch (err: any) {
     console.error(`[card] Failed to fetch branches: ${err.message}`);
   }
@@ -515,18 +505,18 @@ async function fetchBranchesAndUpdateCardByToken(
 
 async function updateCardWithBranches(
   callbackToken: string,
-  projectName: string,
+  project: ProjectConfig,
   branches: string[]
 ) {
   try {
     const cardStr = buildReleaseCard(
       config.github.projects,
       branches,
-      projectName
+      project
     );
     await updateCardByToken(callbackToken, cardStr);
     console.log(
-      `[card] Card updated via token with ${branches.length} branches for ${projectName}`
+      `[card] Card updated via token with ${branches.length} branches for ${project.name}`
     );
   } catch (err: any) {
     console.error(`[card] Failed to update card via token: ${err.message}`);

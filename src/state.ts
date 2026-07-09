@@ -8,6 +8,7 @@ interface RunEntry {
   chatId: string;
   openId: string;
   branch: string;
+  projectName: string;
   modeStr: string;
   expiresAt: number;
 }
@@ -76,12 +77,14 @@ export function setRunContext(
   chatId: string,
   openId: string,
   branch: string,
+  projectName: string,
   modeStr: string
 ): void {
   runStore.set(runId, {
     chatId,
     openId,
     branch,
+    projectName,
     modeStr,
     expiresAt: Date.now() + RUN_TTL_MS,
   });
@@ -89,13 +92,13 @@ export function setRunContext(
 
 export function getRunContext(
   runId: number
-): { chatId: string; openId: string; branch: string; modeStr: string } | null {
+): { chatId: string; openId: string; branch: string; projectName: string; modeStr: string } | null {
   const entry = runStore.get(runId);
   if (!entry || Date.now() > entry.expiresAt) {
     runStore.delete(runId);
     return null;
   }
-  return { chatId: entry.chatId, openId: entry.openId, branch: entry.branch, modeStr: entry.modeStr };
+  return { chatId: entry.chatId, openId: entry.openId, branch: entry.branch, projectName: entry.projectName, modeStr: entry.modeStr };
 }
 
 export function removeRunContext(runId: number): void {

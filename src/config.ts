@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import type { ProjectConfig } from "./types";
+import pkg from "../package.json";
 
 function requireEnv(key: string): string {
   const val = process.env[key];
@@ -45,6 +46,7 @@ function parseProjects(): ProjectConfig[] {
 }
 
 export const config = {
+  version: pkg.version,
   port: parseInt(process.env.PORT || "3000", 10),
 
   feishu: {

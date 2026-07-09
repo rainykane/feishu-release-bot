@@ -1,9 +1,16 @@
+import { config } from "./config";
 import type { ProjectConfig } from "./types";
+
+function hasReleaseMode(project?: ProjectConfig): boolean {
+  if (!project) return false;
+  if (!project.inputs) return true; // default inputs support both modes
+  return project.inputs.build_release !== undefined;
+}
 
 export function buildReleaseCard(
   projects: ProjectConfig[],
   branches: string[],
-  selectedProject?: string
+  selectedProject?: ProjectConfig
 ): string {
   const projectOptions = projects.map((p) => ({
     text: { tag: "plain_text", content: p.name },
@@ -18,6 +25,10 @@ export function buildReleaseCard(
   const elements: any[] = [];
 
   // Project dropdown
+  elements.push({
+    tag: "div",
+    text: { tag: "lark_md", content: "**项目:**" },
+  });
   const projectSelect: any = {
     tag: "select_static",
     placeholder: { tag: "plain_text", content: "Choose a project" },
@@ -25,7 +36,7 @@ export function buildReleaseCard(
     options: projectOptions,
   };
   if (selectedProject) {
-    projectSelect.initial_option = selectedProject;
+    projectSelect.initial_option = selectedProject.name;
   }
   elements.push({
     tag: "action",
@@ -33,6 +44,10 @@ export function buildReleaseCard(
   });
 
   // Branch dropdown
+  elements.push({
+    tag: "div",
+    text: { tag: "lark_md", content: "**分支:**" },
+  });
   const branchPlaceholder =
     branches.length > 0
       ? "Choose a branch"
@@ -52,26 +67,7 @@ export function buildReleaseCard(
     ],
   });
 
-  // Build buttons
-  elements.push({ tag: "hr" });
-  elements.push({
-    tag: "action",
-    actions: [
-      {
-        tag: "button",
-        text: { tag: "plain_text", content: "📦 Only Build" },
-        type: "primary",
-        value: { key: "only_build" },
-      },
-      {
-        tag: "button",
-        text: { tag: "plain_text", content: "🚀 Build & Release" },
-        type: "danger",
-        value: { key: "build_release" },
-      },
-    ],
-  });
-  elements.push({ tag: "hr" });
+  // Refresh branches button
   elements.push({
     tag: "action",
     actions: [
@@ -83,20 +79,40 @@ export function buildReleaseCard(
       },
     ],
   });
+
+  elements.push({ tag: "hr" });
+
+  // Build buttons
+  const buildActions: any[] = [
+    {
+      tag: "button",
+      text: { tag: "plain_text", content: "构建" },
+      type: "primary",
+      value: { key: "only_build" },
+    },
+  ];
+
+  if (hasReleaseMode(selectedProject)) {
+    buildActions.push({
+      tag: "button",
+      text: { tag: "plain_text", content: "🚀 Build & Release" },
+      type: "danger",
+      value: { key: "build_release" },
+    });
+  }
+
   elements.push({
-    tag: "note",
-    elements: [
-      {
-        tag: "plain_text",
-        content: "Select a project and branch, then click a build button.",
-      },
-    ],
+    tag: "action",
+    actions: buildActions,
   });
 
   return JSON.stringify({
     config: { wide_screen_mode: true, update_multi: true },
     header: {
-      title: { tag: "plain_text", content: "🚀 Trigger Release Build" },
+      title: {
+        tag: "plain_text",
+        content: `打包助手 - ${config.version}`,
+      },
       template: "blue",
     },
     elements,
