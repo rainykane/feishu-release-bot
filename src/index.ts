@@ -529,11 +529,32 @@ function unwrapCardAction(body: any): CardActionCallback | null {
   const wrapper = body as FeishuEventWrapper;
   if (wrapper.header?.event_type === "card.action.trigger" && wrapper.event) {
     const ev = wrapper.event as any;
-    console.log("[card] Unwrapped from event envelope");
+    // Debug: log available top-level keys to find correct field names
+    console.log("[card] DEBUG event keys:", Object.keys(ev).join(", "));
+    console.log(
+      "[card] DEBUG ev.open_message_id=%s ev.context?.open_message_id=%s ev.message?.message_id=%s",
+      ev.open_message_id,
+      ev.context?.open_message_id,
+      ev.message?.message_id
+    );
+    console.log(
+      "[card] DEBUG ev.open_chat_id=%s ev.context?.open_chat_id=%s ev.message?.chat_id=%s",
+      ev.open_chat_id,
+      ev.context?.open_chat_id,
+      ev.message?.chat_id
+    );
     return {
       open_id: ev.operator?.open_id ?? "",
-      open_message_id: ev.open_message_id ?? "",
-      open_chat_id: ev.open_chat_id ?? "",
+      open_message_id:
+        ev.open_message_id ||
+        ev.context?.open_message_id ||
+        ev.message?.message_id ||
+        "",
+      open_chat_id:
+        ev.open_chat_id ||
+        ev.context?.open_chat_id ||
+        ev.message?.chat_id ||
+        "",
       action: ev.action ?? { tag: "", value: { key: "branch_select" } },
     };
   }
