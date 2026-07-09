@@ -129,7 +129,8 @@ app.post("/callback", async (req, res) => {
 
   switch (key) {
     case "project_select": {
-      const projectName = parseOption(cb.action.option);
+      // Button click — project name comes from action.value.project
+      const projectName = cb.action.value?.project || parseOption(cb.action.option);
       if (!projectName) {
         res.json({});
         break;
@@ -147,23 +148,13 @@ app.post("/callback", async (req, res) => {
 
       const cached = branchCache.get(projectName);
       if (cached) {
-        // Cache hit → return card in callback response (preserves UI state)
-        const cardStr = buildReleaseCard(config.github.projects, cached);
+        // Return updated card in button callback response (preserves UI state)
+        const cardStr = buildReleaseCard(config.github.projects, cached, projectName);
         const card = JSON.parse(cardStr);
-        setProject(cb.open_message_id, projectName);
-        res.json({
-          card,
-          toast: {
-            type: "success",
-            content: `✅ Loaded ${cached.length} branches from ${projectName}`,
-          },
-        });
-        console.log(`[card] Cache hit: returned ${cached.length} branches`);
+        res.json({ card });
+        console.log(`[card] Card updated with ${cached.length} branches`);
       } else {
-        // Cache miss → respond immediately, async update via PATCH (fallback)
-        res.json({
-          toast: { type: "info", content: `Loading branches for ${projectName}...` },
-        });
+        res.json({});
         fetchBranchesAndUpdateCard(
           cb.open_message_id,
           cb.open_chat_id,
@@ -173,6 +164,14 @@ app.post("/callback", async (req, res) => {
       }
       break;
     }
+
+    case "change_project":
+      // Return to project selection card
+      remove(cb.open_message_id);
+      res.json({
+        card: JSON.parse(buildReleaseCard(config.github.projects, [])),
+      });
+      break;
 
     case "branch_select": {
       const branch = parseOption(cb.action.option);
@@ -530,9 +529,9 @@ async function fetchBranchesAndUpdateCard(
     branchCache.set(projectName, branches);
     console.log(`[card] Got ${branches.length} branches for ${projectName}`);
 
-    const cardStr = buildReleaseCard(config.github.projects, branches);
+    const cardStr = buildReleaseCard(config.github.projects, branches, projectName);
 
-    // Restore card state after rebuilding the card JSON
+    // Restore card state after rebuilding
     setProject(messageId, projectName);
     const prevBranch = getBranch(messageId);
     if (prevBranch) {
