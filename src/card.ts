@@ -25,7 +25,7 @@ export function buildReleaseCard(
     options: projectOptions,
   };
   if (selectedProject) {
-    projectSelect.initial_value = selectedProject;
+    projectSelect.initial_option = selectedProject;
   }
   elements.push({
     tag: "action",
