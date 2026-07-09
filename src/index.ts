@@ -204,20 +204,24 @@ function handleMessageEvent(
     `[message] chat_type=${msg.message.chat_type} content=${msg.message.content.slice(0, 100)}`
   );
 
-  // Only group chat
-  if (msg.message.chat_type !== "group") {
-    console.log("[message] Skipped: not a group chat");
+  // Only group chat or private (p2p)
+  if (msg.message.chat_type !== "group" && msg.message.chat_type !== "p2p") {
+    console.log(`[message] Skipped: unsupported chat_type ${msg.message.chat_type}`);
     res.sendStatus(200);
     return;
   }
 
-  // Check bot @mention
-  const mentions = msg.message.mentions || [];
-  const botMentioned = mentions.some((m) => !!m.id?.open_id);
-  if (!botMentioned) {
-    console.log("[message] Skipped: bot not mentioned");
-    res.sendStatus(200);
-    return;
+  const isGroup = msg.message.chat_type === "group";
+
+  // Group chat: check bot @mention
+  if (isGroup) {
+    const mentions = msg.message.mentions || [];
+    const botMentioned = mentions.some((m) => !!m.id?.open_id);
+    if (!botMentioned) {
+      console.log("[message] Skipped: bot not mentioned");
+      res.sendStatus(200);
+      return;
+    }
   }
 
   // Parse text
@@ -236,10 +240,12 @@ function handleMessageEvent(
     return;
   }
 
-  // Remove @mention prefix: "@bot release" → "release"
-  const spaceIdx = text.indexOf(" ");
-  if (spaceIdx > 0) {
-    text = text.slice(spaceIdx + 1).trim();
+  // Group chat: remove @mention prefix: "@bot release" → "release"
+  if (isGroup) {
+    const spaceIdx = text.indexOf(" ");
+    if (spaceIdx > 0) {
+      text = text.slice(spaceIdx + 1).trim();
+    }
   }
 
   console.log(`[message] Command text: "${text}"`);
