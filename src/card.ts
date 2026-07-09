@@ -55,7 +55,7 @@ export function buildReleaseCard(
     },
     {
       tag: "button",
-      text: { tag: "plain_text", content: "刷新" },
+      text: { tag: "plain_text", content: "🔄 刷新" },
       type: "default",
       value: { key: "refresh_branches" },
     },
@@ -72,7 +72,7 @@ export function buildReleaseCard(
   const buildActions: any[] = [
     {
       tag: "button",
-      text: { tag: "plain_text", content: "构建" },
+      text: { tag: "plain_text", content: "🔨 构建" },
       type: "primary",
       value: { key: "only_build" },
     },
@@ -97,7 +97,7 @@ export function buildReleaseCard(
     header: {
       title: {
         tag: "plain_text",
-        content: "全世界最好的Builder",
+        content: "全世界最好的Builder ⭐️",
       },
       template: "purple",
     },
