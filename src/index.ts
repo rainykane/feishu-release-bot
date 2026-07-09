@@ -351,7 +351,7 @@ async function handleBuildTrigger(
           console.log(`[workflow] Stored run #${run.id} → chat ${cb.open_chat_id}`);
           sendText(
             cb.open_chat_id,
-            `⏳ **开始构建**\n**项目:** ${projectName}\n**分支:** ${branch}\n${run.html_url}`
+            `开始构建 ⏳\n**项目:** ${projectName}\n**分支:** ${branch}\n${run.html_url}`
           );
         }
       } catch (err: any) {
@@ -456,11 +456,15 @@ app.post("/webhook", (req, res) => {
   removeRunContext(run.id);
 
   const conclusion = run.conclusion ?? "unknown";
-  const emoji =
-    conclusion === "success" ? "✅" : conclusion === "failure" ? "❌" : "⚠️";
+  const resultText =
+    conclusion === "success"
+      ? `构建成功 ヾ(^▽^)ノ <at user_id="${ctx.openId}"></at>`
+      : conclusion === "failure"
+        ? `构建失败 ❌ <at user_id="${ctx.openId}"></at>`
+        : `构建${conclusion} ⚠️ <at user_id="${ctx.openId}"></at>`;
 
   const msg = [
-    `${emoji} **构建${conclusion === "success" ? "成功" : "失败"}！** <at user_id="${ctx.openId}"></at>`,
+    resultText,
     `**项目:** ${ctx.projectName}`,
     `**分支:** ${ctx.branch}`,
     run.html_url,
