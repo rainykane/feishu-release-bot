@@ -1,9 +1,8 @@
-import { config } from "./config";
 import type { ProjectConfig } from "./types";
 
 function hasReleaseMode(project?: ProjectConfig): boolean {
   if (!project) return false;
-  if (!project.inputs) return true; // default inputs support both modes
+  if (!project.inputs) return true;
   return project.inputs.build_release !== undefined;
 }
 
@@ -24,14 +23,11 @@ export function buildReleaseCard(
 
   const elements: any[] = [];
 
-  // Project dropdown
-  elements.push({
-    tag: "div",
-    text: { tag: "lark_md", content: "**项目:**" },
-  });
+  // Row 1: 项目: [dropdown]
   const projectSelect: any = {
     tag: "select_static",
     placeholder: { tag: "plain_text", content: "Choose a project" },
+    width: "fill",
     value: { key: "project_select" },
     options: projectOptions,
   };
@@ -39,15 +35,34 @@ export function buildReleaseCard(
     projectSelect.initial_option = selectedProject.name;
   }
   elements.push({
-    tag: "action",
-    actions: [projectSelect],
+    tag: "column_set",
+    flex_mode: "none",
+    columns: [
+      {
+        tag: "column",
+        width: "auto",
+        elements: [
+          {
+            tag: "div",
+            text: { tag: "lark_md", content: "**项目:**" },
+          },
+        ],
+      },
+      {
+        tag: "column",
+        width: "weighted",
+        weight: 1,
+        elements: [
+          {
+            tag: "action",
+            actions: [projectSelect],
+          },
+        ],
+      },
+    ],
   });
 
-  // Branch dropdown
-  elements.push({
-    tag: "div",
-    text: { tag: "lark_md", content: "**分支:**" },
-  });
+  // Row 2: 分支: [dropdown] [刷新]
   const branchPlaceholder =
     branches.length > 0
       ? "Choose a branch"
@@ -55,27 +70,46 @@ export function buildReleaseCard(
         ? "Loading branches..."
         : "Choose a project first";
 
-  elements.push({
-    tag: "action",
-    actions: [
-      {
-        tag: "select_static",
-        placeholder: { tag: "plain_text", content: branchPlaceholder },
-        value: { key: "branch_select" },
-        options: branchOptions,
-      },
-    ],
-  });
+  const branchAction: any = {
+    tag: "select_static",
+    placeholder: { tag: "plain_text", content: branchPlaceholder },
+    width: "fill",
+    value: { key: "branch_select" },
+    options: branchOptions,
+  };
 
-  // Refresh branches button
   elements.push({
-    tag: "action",
-    actions: [
+    tag: "column_set",
+    flex_mode: "none",
+    columns: [
       {
-        tag: "button",
-        text: { tag: "plain_text", content: "🔄 Refresh Branches" },
-        type: "default",
-        value: { key: "refresh_branches" },
+        tag: "column",
+        width: "auto",
+        elements: [
+          {
+            tag: "div",
+            text: { tag: "lark_md", content: "**分支:**" },
+          },
+        ],
+      },
+      {
+        tag: "column",
+        width: "weighted",
+        weight: 1,
+        elements: [
+          {
+            tag: "action",
+            actions: [
+              branchAction,
+              {
+                tag: "button",
+                text: { tag: "plain_text", content: "刷新" },
+                type: "default",
+                value: { key: "refresh_branches" },
+              },
+            ],
+          },
+        ],
       },
     ],
   });
@@ -111,9 +145,9 @@ export function buildReleaseCard(
     header: {
       title: {
         tag: "plain_text",
-        content: `打包助手 - ${config.version}`,
+        content: "全世界最好的Builder",
       },
-      template: "blue",
+      template: "purple",
     },
     elements,
   });
