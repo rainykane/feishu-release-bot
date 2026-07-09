@@ -25,6 +25,9 @@ import type {
 
 const app = express();
 
+// Branch cache: projectName → branch[] (prefetched when card is first sent)
+const branchCache = new Map<string, string[]>();
+
 // Parse body first so it's available in the logger
 app.use(express.json());
 
@@ -141,16 +144,33 @@ app.post("/callback", async (req, res) => {
       console.log(
         `[card] Project selected: "${projectName}" → card ${cb.open_message_id}`
       );
-      // Respond immediately (Feishu callback timeout is 3s), then async update card
-      res.json({
-        toast: { type: "info", content: `Loading branches for ${projectName}...` },
-      });
-      fetchBranchesAndUpdateCard(
-        cb.open_message_id,
-        cb.open_chat_id,
-        projectName,
-        project
-      );
+
+      const cached = branchCache.get(projectName);
+      if (cached) {
+        // Cache hit → return card in callback response (preserves UI state)
+        const cardStr = buildReleaseCard(config.github.projects, cached);
+        const card = JSON.parse(cardStr);
+        setProject(cb.open_message_id, projectName);
+        res.json({
+          card,
+          toast: {
+            type: "success",
+            content: `✅ Loaded ${cached.length} branches from ${projectName}`,
+          },
+        });
+        console.log(`[card] Cache hit: returned ${cached.length} branches`);
+      } else {
+        // Cache miss → respond immediately, async update via PATCH (fallback)
+        res.json({
+          toast: { type: "info", content: `Loading branches for ${projectName}...` },
+        });
+        fetchBranchesAndUpdateCard(
+          cb.open_message_id,
+          cb.open_chat_id,
+          projectName,
+          project
+        );
+      }
       break;
     }
 
@@ -271,6 +291,11 @@ async function handleReleaseCommand(chatId: string) {
     const cardJSON = buildReleaseCard(config.github.projects, []);
     await sendCard(chatId, cardJSON);
     console.log(`[release] Card sent to chat ${chatId}`);
+
+    // Prefetch branches for all projects in background so cache is warm
+    for (const p of config.github.projects) {
+      prefetchBranches(p);
+    }
   } catch (err: any) {
     console.error(`[release] Failed: ${err.message}`);
     sendText(
@@ -482,6 +507,18 @@ app.post("/webhook", (req, res) => {
 // ── Async Card Updater ──────────────────────────────────────────────
 // Called after responding to the callback, so it won't hit Feishu's 3s timeout.
 
+async function prefetchBranches(project: ProjectConfig) {
+  // Skip if already cached
+  if (branchCache.has(project.name)) return;
+  try {
+    const branches = await listBranches(project);
+    branchCache.set(project.name, branches);
+    console.log(`[prefetch] Cached ${branches.length} branches for ${project.name}`);
+  } catch (err: any) {
+    console.error(`[prefetch] Failed for ${project.name}: ${err.message}`);
+  }
+}
+
 async function fetchBranchesAndUpdateCard(
   messageId: string,
   chatId: string,
@@ -490,6 +527,7 @@ async function fetchBranchesAndUpdateCard(
 ) {
   try {
     const branches = await listBranches(project);
+    branchCache.set(projectName, branches);
     console.log(`[card] Got ${branches.length} branches for ${projectName}`);
 
     const cardStr = buildReleaseCard(config.github.projects, branches);
