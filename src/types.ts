@@ -34,6 +34,7 @@ export interface CardActionCallback {
   open_id: string;
   open_message_id: string;
   open_chat_id: string;
+  token: string; // for delayed card update API
   action: {
     tag: string;
     value: CardActionValue;
@@ -42,8 +43,7 @@ export interface CardActionCallback {
 }
 
 export interface CardActionValue {
-  key: "project_select" | "change_project" | "branch_select" | "only_build" | "build_release" | "refresh_branches";
-  project?: string; // project name when key=project_select (button click)
+  key: "project_select" | "branch_select" | "only_build" | "build_release" | "refresh_branches";
 }
 
 // Feishu API types

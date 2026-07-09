@@ -2,7 +2,7 @@ import express from "express";
 import crypto from "crypto";
 import { config } from "./config";
 import { listBranches, triggerWorkflow, getLatestRun } from "./github";
-import { sendCard, sendText, updateCard } from "./feishu";
+import { sendCard, sendText, updateCardByToken } from "./feishu";
 import { buildReleaseCard } from "./card";
 import {
   setProject,
@@ -129,8 +129,7 @@ app.post("/callback", async (req, res) => {
 
   switch (key) {
     case "project_select": {
-      // Button click — project name comes from action.value.project
-      const projectName = cb.action.value?.project || parseOption(cb.action.option);
+      const projectName = parseOption(cb.action.option);
       if (!projectName) {
         res.json({});
         break;
@@ -146,32 +145,18 @@ app.post("/callback", async (req, res) => {
         `[card] Project selected: "${projectName}" → card ${cb.open_message_id}`
       );
 
+      // Respond empty immediately to avoid 200672 timeout,
+      // then async update card via delayed update API (uses callback token)
+      res.json({});
+
       const cached = branchCache.get(projectName);
       if (cached) {
-        // Return updated card in button callback response (preserves UI state)
-        const cardStr = buildReleaseCard(config.github.projects, cached, projectName);
-        const card = JSON.parse(cardStr);
-        res.json({ card });
-        console.log(`[card] Card updated with ${cached.length} branches`);
+        updateCardWithBranches(cb.token, projectName, cached);
       } else {
-        res.json({});
-        fetchBranchesAndUpdateCard(
-          cb.open_message_id,
-          cb.open_chat_id,
-          projectName,
-          project
-        );
+        fetchBranchesAndUpdateCardByToken(cb.token, projectName, project);
       }
       break;
     }
-
-    case "change_project":
-      // Return to project selection card
-      remove(cb.open_message_id);
-      res.json({
-        card: JSON.parse(buildReleaseCard(config.github.projects, [])),
-      });
-      break;
 
     case "branch_select": {
       const branch = parseOption(cb.action.option);
@@ -420,16 +405,11 @@ async function handleRefreshBranches(
   }
 
   console.log(`[card] Refresh branches for ${projectName}`);
-  // Respond immediately, then async update card
+  // Respond immediately, then async update card via delayed update API
   res.json({
     toast: { type: "info", content: "Refreshing branches..." },
   });
-  fetchBranchesAndUpdateCard(
-    cb.open_message_id,
-    cb.open_chat_id,
-    projectName,
-    project
-  );
+  fetchBranchesAndUpdateCardByToken(cb.token, projectName, project);
 }
 
 // ── GitHub Webhook ──────────────────────────────────────────────────
@@ -518,9 +498,8 @@ async function prefetchBranches(project: ProjectConfig) {
   }
 }
 
-async function fetchBranchesAndUpdateCard(
-  messageId: string,
-  chatId: string,
+async function fetchBranchesAndUpdateCardByToken(
+  callbackToken: string,
   projectName: string,
   project: ProjectConfig
 ) {
@@ -528,24 +507,29 @@ async function fetchBranchesAndUpdateCard(
     const branches = await listBranches(project);
     branchCache.set(projectName, branches);
     console.log(`[card] Got ${branches.length} branches for ${projectName}`);
-
-    const cardStr = buildReleaseCard(config.github.projects, branches, projectName);
-
-    // Restore card state after rebuilding
-    setProject(messageId, projectName);
-    const prevBranch = getBranch(messageId);
-    if (prevBranch) {
-      setBranch(messageId, prevBranch);
-    }
-
-    await updateCard(messageId, cardStr);
-    console.log(`[card] Card updated with ${branches.length} branches`);
+    await updateCardWithBranches(callbackToken, projectName, branches);
   } catch (err: any) {
-    console.error(`[card] Failed to update card: ${err.message}`);
-    sendText(
-      chatId,
-      `❌ Failed to load branches for ${projectName}: ${err.message}`
+    console.error(`[card] Failed to fetch branches: ${err.message}`);
+  }
+}
+
+async function updateCardWithBranches(
+  callbackToken: string,
+  projectName: string,
+  branches: string[]
+) {
+  try {
+    const cardStr = buildReleaseCard(
+      config.github.projects,
+      branches,
+      projectName
     );
+    await updateCardByToken(callbackToken, cardStr);
+    console.log(
+      `[card] Card updated via token with ${branches.length} branches for ${projectName}`
+    );
+  } catch (err: any) {
+    console.error(`[card] Failed to update card via token: ${err.message}`);
   }
 }
 
@@ -592,6 +576,7 @@ function unwrapCardAction(body: any): CardActionCallback | null {
         ev.context?.open_chat_id ||
         ev.message?.chat_id ||
         "",
+      token: ev.token ?? "",
       action: ev.action ?? { tag: "", value: { key: "branch_select" } },
     };
   }

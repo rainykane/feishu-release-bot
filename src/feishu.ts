@@ -80,6 +80,32 @@ export async function updateCard(
   }
 }
 
+// Delayed card update using the token from card callback.
+// Must be called AFTER responding to the callback (within 30 min, max 2 uses per token).
+export async function updateCardByToken(
+  callbackToken: string,
+  cardJSON: string
+): Promise<void> {
+  const tenantToken = await getTenantToken();
+  const card = JSON.parse(cardJSON);
+  const res = await fetch(
+    `${config.feishu.apiHost}/open-apis/interactive/v1/card/update`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tenantToken}`,
+        "Content-Type": "application/json; charset=utf-8",
+      },
+      body: JSON.stringify({ token: callbackToken, card }),
+    }
+  );
+
+  const data = await res.json();
+  if (data.code !== 0) {
+    throw new Error(`delayed card update: code ${data.code}: ${data.msg}`);
+  }
+}
+
 export async function sendText(
   chatId: string,
   text: string
