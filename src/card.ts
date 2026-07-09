@@ -94,7 +94,7 @@ export function buildReleaseCard(
   });
 
   return JSON.stringify({
-    config: { wide_screen_mode: true },
+    config: { wide_screen_mode: true, update_multi: true },
     header: {
       title: { tag: "plain_text", content: "🚀 Trigger Release Build" },
       template: "blue",
