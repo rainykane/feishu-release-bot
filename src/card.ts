@@ -1,5 +1,15 @@
-export function buildReleaseCard(branches: string[]): string {
-  const options = branches.map((b) => ({
+import type { ProjectConfig } from "./types";
+
+export function buildReleaseCard(
+  projects: ProjectConfig[],
+  branches: string[]
+): string {
+  const projectOptions = projects.map((p) => ({
+    text: { tag: "plain_text", content: p.name },
+    value: p.name,
+  }));
+
+  const branchOptions = branches.map((b) => ({
     text: { tag: "plain_text", content: b },
     value: b,
   }));
@@ -15,8 +25,22 @@ export function buildReleaseCard(branches: string[]): string {
         tag: "div",
         text: {
           tag: "lark_md",
-          content: "Select the branch to build and release from:",
+          content: "Select the project and branch to build:",
         },
+      },
+      {
+        tag: "action",
+        actions: [
+          {
+            tag: "select_static",
+            placeholder: {
+              tag: "plain_text",
+              content: "Choose a project",
+            },
+            value: { key: "project_select" },
+            options: projectOptions,
+          },
+        ],
       },
       {
         tag: "action",
@@ -28,7 +52,7 @@ export function buildReleaseCard(branches: string[]): string {
               content: "Choose a branch",
             },
             value: { key: "branch_select" },
-            options,
+            options: branchOptions,
           },
         ],
       },
@@ -68,7 +92,7 @@ export function buildReleaseCard(branches: string[]): string {
           {
             tag: "plain_text",
             content:
-              "Only Build: just builds the Docker image. Build & Release: builds image + publishes GitHub Release.",
+              "Select a project first, then choose a branch. Only Build: builds the Docker image. Build & Release: builds image + publishes GitHub Release.",
           },
         ],
       },

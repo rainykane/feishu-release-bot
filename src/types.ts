@@ -42,7 +42,7 @@ export interface CardActionCallback {
 }
 
 export interface CardActionValue {
-  key: "branch_select" | "only_build" | "build_release";
+  key: "project_select" | "branch_select" | "only_build" | "build_release" | "refresh_branches";
 }
 
 // Feishu API types
@@ -58,4 +58,22 @@ export interface TenantTokenResponse {
 
 export interface GitHubBranch {
   name: string;
+}
+
+export interface GitHubWorkflowRun {
+  id: number;
+  name: string;
+  status: string; // "queued" | "in_progress" | "completed"
+  conclusion: string | null; // "success" | "failure" | "cancelled" | null
+  html_url: string;
+  created_at: string;
+}
+
+// Multi-project config
+
+export interface ProjectConfig {
+  name: string;
+  owner: string;
+  repo: string;
+  workflowId: string;
 }

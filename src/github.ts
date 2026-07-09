@@ -1,5 +1,5 @@
 import { config } from "./config";
-import type { GitHubBranch } from "./types";
+import type { GitHubBranch, GitHubWorkflowRun, ProjectConfig } from "./types";
 
 const apiBase = "https://api.github.com";
 
@@ -12,22 +12,35 @@ function headers(): Record<string, string> {
   };
 }
 
-export async function listBranches(): Promise<string[]> {
-  const url = `${apiBase}/repos/${config.github.owner}/${config.github.repo}/branches?per_page=30`;
-  const res = await fetch(url, { headers: headers() });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`list branches: ${res.status} ${body}`);
+export async function listBranches(project: ProjectConfig): Promise<string[]> {
+  const allBranches: GitHubBranch[] = [];
+  let page = 1;
+
+  while (true) {
+    const url = `${apiBase}/repos/${project.owner}/${project.repo}/branches?per_page=100&page=${page}`;
+    const res = await fetch(url, { headers: headers() });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`list branches: ${res.status} ${body}`);
+    }
+    const branches: GitHubBranch[] = await res.json();
+    allBranches.push(...branches);
+
+    // Check if there are more pages via the Link header
+    const linkHeader = res.headers.get("link");
+    if (!linkHeader || !linkHeader.includes('rel="next"')) break;
+    page++;
   }
-  const branches: GitHubBranch[] = await res.json();
-  return branches.map((b) => b.name);
+
+  return allBranches.map((b) => b.name);
 }
 
 export async function triggerWorkflow(
+  project: ProjectConfig,
   branch: string,
   buildOnly: boolean
 ): Promise<void> {
-  const url = `${apiBase}/repos/${config.github.owner}/${config.github.repo}/actions/workflows/${config.github.workflowId}/dispatches`;
+  const url = `${apiBase}/repos/${project.owner}/${project.repo}/actions/workflows/${project.workflowId}/dispatches`;
 
   const body = JSON.stringify({
     ref: branch,
@@ -43,4 +56,19 @@ export async function triggerWorkflow(
     const respBody = await res.text();
     throw new Error(`trigger workflow: ${res.status} ${respBody}`);
   }
+}
+
+export async function getLatestRun(
+  project: ProjectConfig,
+  branch: string
+): Promise<GitHubWorkflowRun | null> {
+  const url = `${apiBase}/repos/${project.owner}/${project.repo}/actions/workflows/${project.workflowId}/runs?branch=${encodeURIComponent(branch)}&per_page=1`;
+  const res = await fetch(url, { headers: headers() });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`get latest run: ${res.status} ${body}`);
+  }
+  const data = (await res.json()) as { workflow_runs: GitHubWorkflowRun[] };
+  const runs = data.workflow_runs;
+  return runs.length > 0 ? runs[0] : null;
 }

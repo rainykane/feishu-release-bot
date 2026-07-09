@@ -1,15 +1,26 @@
 import express from "express";
+import crypto from "crypto";
 import { config } from "./config";
-import { listBranches, triggerWorkflow } from "./github";
+import { listBranches, triggerWorkflow, getLatestRun } from "./github";
 import { sendCard, sendText } from "./feishu";
 import { buildReleaseCard } from "./card";
-import { setBranch, getBranch, remove } from "./state";
+import {
+  setProject,
+  getProject,
+  setBranch,
+  getBranch,
+  remove,
+  setRunContext,
+  getRunContext,
+  removeRunContext,
+} from "./state";
 import type {
   FeishuEventWrapper,
   UrlVerification,
   MessageEvent,
   TextContent,
   CardActionCallback,
+  ProjectConfig,
 } from "./types";
 
 const app = express();
@@ -114,6 +125,51 @@ app.post("/callback", async (req, res) => {
   }
 
   switch (key) {
+    case "project_select": {
+      const projectName = parseOption(cb.action.option);
+      if (!projectName) {
+        res.json({});
+        break;
+      }
+      const project = findProject(projectName);
+      if (!project) {
+        console.log(`[card] Unknown project: ${projectName}`);
+        res.json({});
+        break;
+      }
+      setProject(cb.open_message_id, projectName);
+      console.log(
+        `[card] Project selected: "${projectName}" → card ${cb.open_message_id}`
+      );
+      // Fetch branches for the selected project and update card in-place
+      try {
+        const branches = await listBranches(project);
+        console.log(
+          `[card] Got ${branches.length} branches for ${projectName}`
+        );
+        const cardStr = buildReleaseCard(config.github.projects, branches);
+        const card = JSON.parse(cardStr);
+        // Restore state in case the card entry was recreated
+        setProject(cb.open_message_id, projectName);
+        res.json({
+          card,
+          toast: {
+            type: "success",
+            content: `✅ Loaded ${branches.length} branches from ${projectName}`,
+          },
+        });
+      } catch (err: any) {
+        console.error(`[card] Failed to fetch branches: ${err.message}`);
+        res.json({
+          toast: {
+            type: "error",
+            content: `❌ Failed to fetch branches: ${err.message}`,
+          },
+        });
+      }
+      break;
+    }
+
     case "branch_select": {
       const branch = parseOption(cb.action.option);
       if (branch) {
@@ -219,19 +275,17 @@ function handleMessageEvent(
 }
 
 async function handleReleaseCommand(chatId: string) {
-  console.log(`[release] Fetching branches...`);
+  console.log(`[release] Sending card with ${config.github.projects.length} project(s)...`);
   try {
-    const branches = await listBranches();
-    console.log(`[release] Got ${branches.length} branches: ${branches.join(", ")}`);
-
-    const cardJSON = buildReleaseCard(branches);
+    // Send card with project list, empty branches (user selects project first)
+    const cardJSON = buildReleaseCard(config.github.projects, []);
     await sendCard(chatId, cardJSON);
     console.log(`[release] Card sent to chat ${chatId}`);
   } catch (err: any) {
     console.error(`[release] Failed: ${err.message}`);
     sendText(
       chatId,
-      "❌ Failed to fetch branches. Please check the bot configuration."
+      "❌ Failed to send card. Please check the bot configuration."
     );
   }
 }
@@ -243,13 +297,26 @@ async function handleBuildTrigger(
   cb: CardActionCallback,
   buildOnly: boolean
 ) {
+  const projectName = getProject(cb.open_message_id);
   const branch = getBranch(cb.open_message_id);
-  if (!branch) {
-    console.log(`[card] Build trigger failed: no branch selected`);
+
+  if (!projectName || !branch) {
+    console.log(`[card] Build trigger failed: no project or branch selected`);
     res.json({
       toast: {
         type: "error",
-        content: "Please select a branch first, then click the button again.",
+        content: "Please select a project and branch first, then click the button again.",
+      },
+    });
+    return;
+  }
+
+  const project = findProject(projectName);
+  if (!project) {
+    res.json({
+      toast: {
+        type: "error",
+        content: `Unknown project: ${projectName}`,
       },
     });
     return;
@@ -259,29 +326,48 @@ async function handleBuildTrigger(
 
   try {
     console.log(
-      `[workflow] Dispatching: branch=${branch} mode=${modeStr}`
+      `[workflow] Dispatching: project=${projectName} branch=${branch} mode=${modeStr}`
     );
-    await triggerWorkflow(branch, buildOnly);
+    await triggerWorkflow(project, branch, buildOnly);
     remove(cb.open_message_id);
 
     res.json({
       toast: {
         type: "success",
-        content: `✅ Workflow triggered! Branch: ${branch}, Mode: ${modeStr}`,
+        content: `✅ Workflow triggered! ${projectName} @ ${branch}, Mode: ${modeStr}`,
       },
     });
 
     const msg = [
       "🚀 Release workflow triggered!",
+      `Project: \`${projectName}\``,
       `Branch: \`${branch}\``,
       `Mode: ${modeStr}`,
-      `Check GitHub Actions: https://github.com/${config.github.owner}/${config.github.repo}/actions`,
+      `Check GitHub Actions: https://github.com/${project.owner}/${project.repo}/actions`,
     ].join("\n");
     sendText(cb.open_chat_id, msg);
 
     console.log(
-      `[workflow] ✅ Dispatched: branch=${branch} mode=${modeStr} user=${cb.open_id}`
+      `[workflow] ✅ Dispatched: project=${projectName} branch=${branch} mode=${modeStr} user=${cb.open_id}`
     );
+
+    // One-shot lookup to find the run_id, then store for webhook
+    setTimeout(async () => {
+      try {
+        await new Promise((r) => setTimeout(r, 6_000));
+        const run = await getLatestRun(project, branch);
+        if (run) {
+          setRunContext(run.id, cb.open_chat_id, cb.open_id, branch, modeStr);
+          console.log(`[workflow] Stored run #${run.id} → chat ${cb.open_chat_id}`);
+          sendText(
+            cb.open_chat_id,
+            `⏳ Build started...\nProject: \`${projectName}\`\nBranch: \`${branch}\`\n${run.html_url}`
+          );
+        }
+      } catch (err: any) {
+        console.error(`[workflow] Failed to find run: ${err.message}`);
+      }
+    }, 0);
   } catch (err: any) {
     console.error(`[workflow] ❌ Failed: ${err.message}`);
     res.json({
@@ -297,13 +383,38 @@ async function handleRefreshBranches(
   res: express.Response,
   cb: CardActionCallback
 ) {
-  console.log("[card] Refresh branches requested");
+  const projectName = getProject(cb.open_message_id);
+  if (!projectName) {
+    res.json({
+      toast: {
+        type: "error",
+        content: "Please select a project first.",
+      },
+    });
+    return;
+  }
+
+  const project = findProject(projectName);
+  if (!project) {
+    res.json({
+      toast: {
+        type: "error",
+        content: `Unknown project: ${projectName}`,
+      },
+    });
+    return;
+  }
+
+  console.log(`[card] Refresh branches for ${projectName}`);
   try {
-    const branches = await listBranches();
+    const branches = await listBranches(project);
     console.log(`[card] Got ${branches.length} branches`);
 
-    const cardStr = buildReleaseCard(branches);
+    const cardStr = buildReleaseCard(config.github.projects, branches);
     const card = JSON.parse(cardStr);
+
+    // Restore project selection (buildReleaseCard recreates card state)
+    setProject(cb.open_message_id, projectName);
 
     const prevBranch = getBranch(cb.open_message_id);
     if (prevBranch) {
@@ -328,7 +439,82 @@ async function handleRefreshBranches(
   }
 }
 
+// ── GitHub Webhook ──────────────────────────────────────────────────
+// Repo Settings → Webhooks → Payload URL = https://<host>/webhook
+// Content type: application/json, Secret: same as GITHUB_WEBHOOK_SECRET
+// Events: "Workflow runs" (just workflow_run)
+//
+// GitHub doesn't include workflow inputs in the payload, so we rely on
+// the run_id → chat_id mapping stored at dispatch time.
+
+app.post("/webhook", (req, res) => {
+  // Verify signature
+  const sig = req.headers["x-hub-signature-256"] as string | undefined;
+  if (!sig) {
+    console.log("[webhook] Missing signature header");
+    res.status(401).send("Missing signature");
+    return;
+  }
+
+  const rawBody = JSON.stringify(req.body);
+  const hmac = crypto.createHmac("sha256", config.github.webhookSecret);
+  const expected = `sha256=${hmac.update(rawBody).digest("hex")}`;
+
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+    console.log("[webhook] Signature mismatch");
+    res.status(401).send("Bad signature");
+    return;
+  }
+
+  const eventType = req.headers["x-github-event"] as string;
+  console.log(
+    `[webhook] event=${eventType} action=${req.body?.action} run_id=${req.body?.workflow_run?.id}`
+  );
+
+  // Only care about workflow_run completed
+  if (eventType !== "workflow_run" || req.body?.action !== "completed") {
+    res.send("ok");
+    return;
+  }
+
+  const run = req.body.workflow_run;
+  if (!run?.id) {
+    res.send("ok");
+    return;
+  }
+
+  const ctx = getRunContext(run.id);
+  if (!ctx) {
+    console.log(`[webhook] Run #${run.id} has no chat context, skipping`);
+    res.send("ok");
+    return;
+  }
+  removeRunContext(run.id);
+
+  const conclusion = run.conclusion ?? "unknown";
+  const emoji =
+    conclusion === "success" ? "✅" : conclusion === "failure" ? "❌" : "⚠️";
+
+  const msg = [
+    `<at user_id="${ctx.openId}"></at> ${emoji} Build ${conclusion}!`,
+    `Branch: \`${ctx.branch}\``,
+    `Mode: ${ctx.modeStr}`,
+    run.html_url,
+  ].join("\n");
+
+  sendText(ctx.chatId, msg);
+  console.log(
+    `[webhook] Notified chat ${ctx.chatId}: run #${run.id} ${conclusion}`
+  );
+
+  res.send("ok");
+});
+
 // ── Helpers ─────────────────────────────────────────────────────────
+
+function findProject(name: string): ProjectConfig | undefined {
+  return config.github.projects.find((p) => p.name === name);
+}
 
 // 飞书可能把卡片回调包在事件信封里，也可能直接发裸的
 // 两种格式都兼容：
@@ -371,8 +557,10 @@ app.listen(config.port, () => {
   console.log("  Feishu Release Bot");
   console.log("═══════════════════════════════════════════");
   console.log(`  Port:     ${config.port}`);
+  console.log(`  Projects: ${config.github.projects.map((p) => p.name).join(", ")}`);
   console.log(`  Event:    POST /event`);
   console.log(`  Callback: POST /callback`);
+  console.log(`  Webhook:  POST /webhook`);
   console.log(`  Health:   GET  /health`);
   console.log("═══════════════════════════════════════════");
 });
