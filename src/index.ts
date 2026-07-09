@@ -458,7 +458,7 @@ app.post("/webhook", (req, res) => {
   const conclusion = run.conclusion ?? "unknown";
   const resultText =
     conclusion === "success"
-      ? `构建成功 ヾ(^▽^)ノ <at user_id="${ctx.openId}"></at>`
+      ? `构建成功ヾ(^▽^)ノ 🎉🎉 <at user_id="${ctx.openId}"></at>`
       : conclusion === "failure"
         ? `构建失败 ❌ <at user_id="${ctx.openId}"></at>`
         : `构建${conclusion} ⚠️ <at user_id="${ctx.openId}"></at>`;
