@@ -26,7 +26,7 @@ export function buildReleaseCard(
   // Row 1: project dropdown (label embedded in placeholder)
   const projectSelect: any = {
     tag: "select_static",
-    placeholder: { tag: "plain_text", content: "请选择项目" },
+    placeholder: { tag: "plain_text", content: "选择要构建的项目" },
     value: { key: "project_select" },
     options: projectOptions,
   };
@@ -38,18 +38,11 @@ export function buildReleaseCard(
     actions: [projectSelect],
   });
 
-  // Row 2: branch dropdown + refresh button (label embedded in placeholder)
-  const branchPlaceholder =
-    branches.length > 0
-      ? "请选择分支"
-      : selectedProject
-        ? "加载中..."
-        : "请先选择项目";
-
+  // Row 2: branch dropdown + refresh button
   const branchActions: any[] = [
     {
       tag: "select_static",
-      placeholder: { tag: "plain_text", content: branchPlaceholder },
+      placeholder: { tag: "plain_text", content: "选择分支" },
       value: { key: "branch_select" },
       options: branchOptions,
     },
