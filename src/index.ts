@@ -514,16 +514,22 @@ function findProject(name: string): ProjectConfig | undefined {
 
 // 飞书可能把卡片回调包在事件信封里，也可能直接发裸的
 // 两种格式都兼容：
-//   裸:  {"open_id":"...", "action":{...}}
-//   包:  {"schema":"2.0", "header":{"event_type":"card.action.trigger"}, "event":{裸格式}}
+//   裸:  {"open_id":"...", "open_message_id":"...", "open_chat_id":"...", "action":{...}}
+//   包:  {"schema":"2.0", "header":{"event_type":"card.action.trigger"}, "event":{"operator":{"open_id":"..."}, "open_message_id":"...", "open_chat_id":"...", "action":{...}}}
 function unwrapCardAction(body: any): CardActionCallback | null {
   if (!body) return null;
 
-  // 信封格式 → 取 event 字段
+  // 信封格式 → 归一化字段
   const wrapper = body as FeishuEventWrapper;
   if (wrapper.header?.event_type === "card.action.trigger" && wrapper.event) {
+    const ev = wrapper.event as any;
     console.log("[card] Unwrapped from event envelope");
-    return wrapper.event as CardActionCallback;
+    return {
+      open_id: ev.operator?.open_id ?? "",
+      open_message_id: ev.open_message_id ?? "",
+      open_chat_id: ev.open_chat_id ?? "",
+      action: ev.action ?? { tag: "", value: { key: "branch_select" } },
+    };
   }
 
   // 裸格式 → 直接使用
