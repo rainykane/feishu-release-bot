@@ -42,14 +42,15 @@ export async function triggerWorkflow(
 ): Promise<void> {
   const url = `${apiBase}/repos/${project.owner}/${project.repo}/actions/workflows/${project.workflowId}/dispatches`;
 
-  const body = JSON.stringify({
-    ref: branch,
-    inputs: {
-      only_build_image: buildOnly,
-      commit: "",
-      image_tag: "",
-    },
-  });
+  const inputs: Record<string, string> = project.inputs
+    ? { ...project.inputs }
+    : {
+        only_build_image: String(buildOnly),
+        commit: "",
+        image_tag: "",
+      };
+
+  const body = JSON.stringify({ ref: branch, inputs });
 
   const res = await fetch(url, { method: "POST", headers: headers(), body });
   if (res.status !== 204) {
