@@ -79,7 +79,7 @@ export function buildReleaseCard(
       tag: "button",
       text: {
         tag: "plain_text",
-        content: selectedProject?.buttonText?.build_release ?? "🚀 Build & Release",
+        content: selectedProject?.buttonText?.build_release ?? "🚀 构建并发布",
       },
       type: "danger",
       value: { key: "build_release" },
