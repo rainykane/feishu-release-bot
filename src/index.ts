@@ -2,7 +2,7 @@ import express from "express";
 import crypto from "crypto";
 import { config } from "./config";
 import { listBranches, triggerWorkflow, getLatestRun } from "./github";
-import { sendCard, sendText } from "./feishu";
+import { sendCard, sendText, updateCard } from "./feishu";
 import { buildReleaseCard } from "./card";
 import {
   setProject,
@@ -141,32 +141,16 @@ app.post("/callback", async (req, res) => {
       console.log(
         `[card] Project selected: "${projectName}" → card ${cb.open_message_id}`
       );
-      // Fetch branches for the selected project and update card in-place
-      try {
-        const branches = await listBranches(project);
-        console.log(
-          `[card] Got ${branches.length} branches for ${projectName}`
-        );
-        const cardStr = buildReleaseCard(config.github.projects, branches);
-        const card = JSON.parse(cardStr);
-        // Restore state in case the card entry was recreated
-        setProject(cb.open_message_id, projectName);
-        res.json({
-          card,
-          toast: {
-            type: "success",
-            content: `✅ Loaded ${branches.length} branches from ${projectName}`,
-          },
-        });
-      } catch (err: any) {
-        console.error(`[card] Failed to fetch branches: ${err.message}`);
-        res.json({
-          toast: {
-            type: "error",
-            content: `❌ Failed to fetch branches: ${err.message}`,
-          },
-        });
-      }
+      // Respond immediately (Feishu callback timeout is 3s), then async update card
+      res.json({
+        toast: { type: "info", content: `Loading branches for ${projectName}...` },
+      });
+      fetchBranchesAndUpdateCard(
+        cb.open_message_id,
+        cb.open_chat_id,
+        projectName,
+        project
+      );
       break;
     }
 
@@ -406,37 +390,16 @@ async function handleRefreshBranches(
   }
 
   console.log(`[card] Refresh branches for ${projectName}`);
-  try {
-    const branches = await listBranches(project);
-    console.log(`[card] Got ${branches.length} branches`);
-
-    const cardStr = buildReleaseCard(config.github.projects, branches);
-    const card = JSON.parse(cardStr);
-
-    // Restore project selection (buildReleaseCard recreates card state)
-    setProject(cb.open_message_id, projectName);
-
-    const prevBranch = getBranch(cb.open_message_id);
-    if (prevBranch) {
-      setBranch(cb.open_message_id, prevBranch);
-    }
-
-    res.json({
-      card,
-      toast: {
-        type: "success",
-        content: `✅ Branches refreshed (${branches.length} total)`,
-      },
-    });
-  } catch (err: any) {
-    console.error(`[card] Refresh failed: ${err.message}`);
-    res.json({
-      toast: {
-        type: "error",
-        content: `❌ Failed to refresh branches: ${err.message}`,
-      },
-    });
-  }
+  // Respond immediately, then async update card
+  res.json({
+    toast: { type: "info", content: "Refreshing branches..." },
+  });
+  fetchBranchesAndUpdateCard(
+    cb.open_message_id,
+    cb.open_chat_id,
+    projectName,
+    project
+  );
 }
 
 // ── GitHub Webhook ──────────────────────────────────────────────────
@@ -509,6 +472,39 @@ app.post("/webhook", (req, res) => {
 
   res.send("ok");
 });
+
+// ── Async Card Updater ──────────────────────────────────────────────
+// Called after responding to the callback, so it won't hit Feishu's 3s timeout.
+
+async function fetchBranchesAndUpdateCard(
+  messageId: string,
+  chatId: string,
+  projectName: string,
+  project: ProjectConfig
+) {
+  try {
+    const branches = await listBranches(project);
+    console.log(`[card] Got ${branches.length} branches for ${projectName}`);
+
+    const cardStr = buildReleaseCard(config.github.projects, branches);
+
+    // Restore card state after rebuilding the card JSON
+    setProject(messageId, projectName);
+    const prevBranch = getBranch(messageId);
+    if (prevBranch) {
+      setBranch(messageId, prevBranch);
+    }
+
+    await updateCard(messageId, cardStr);
+    console.log(`[card] Card updated with ${branches.length} branches`);
+  } catch (err: any) {
+    console.error(`[card] Failed to update card: ${err.message}`);
+    sendText(
+      chatId,
+      `❌ Failed to load branches for ${projectName}: ${err.message}`
+    );
+  }
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────
 

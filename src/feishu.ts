@@ -57,6 +57,29 @@ export async function sendCard(chatId: string, cardJSON: string): Promise<void> 
   }
 }
 
+export async function updateCard(
+  messageId: string,
+  cardJSON: string
+): Promise<void> {
+  const token = await getTenantToken();
+  const res = await fetch(
+    `${config.feishu.apiHost}/open-apis/im/v1/messages/${messageId}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ content: cardJSON }),
+    }
+  );
+
+  const data = await res.json();
+  if (data.code !== 0) {
+    throw new Error(`update card: code ${data.code}: ${data.msg}`);
+  }
+}
+
 export async function sendText(
   chatId: string,
   text: string
