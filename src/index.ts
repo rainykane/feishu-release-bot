@@ -2,7 +2,7 @@ import express from "express";
 import crypto from "crypto";
 import { config } from "./config";
 import { listBranches, triggerWorkflow, getLatestRun } from "./github";
-import { sendCard, sendText, updateCardByToken } from "./feishu";
+import { sendCard, sendText, sendRichText, updateCardByToken } from "./feishu";
 import { buildReleaseCard } from "./card";
 import {
   setProject,
@@ -349,7 +349,7 @@ async function handleBuildTrigger(
         if (run) {
           setRunContext(run.id, cb.open_chat_id, cb.open_id, branch, projectName, modeStr);
           console.log(`[workflow] Stored run #${run.id} → chat ${cb.open_chat_id}`);
-          sendText(
+          sendRichText(
             cb.open_chat_id,
             `开始构建 ⏳\n**项目:** ${projectName}\n**分支:** ${branch}\n${run.html_url}`
           );
@@ -470,7 +470,7 @@ app.post("/webhook", (req, res) => {
     run.html_url,
   ].join("\n");
 
-  sendText(ctx.chatId, msg);
+  sendRichText(ctx.chatId, msg);
   console.log(
     `[webhook] Notified chat ${ctx.chatId}: run #${run.id} ${conclusion}`
   );

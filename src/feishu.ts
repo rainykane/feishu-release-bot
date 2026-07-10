@@ -134,3 +134,66 @@ export async function sendText(
     // Text message delivery failures are non-critical
   }
 }
+
+// Rich text message via post format. Supports **bold** and <at user_id="xxx"></at>.
+export async function sendRichText(
+  chatId: string,
+  text: string
+): Promise<void> {
+  const token = await getTenantToken();
+
+  // Parse text into post content structure
+  const lines = text.split("\n");
+  const paragraphs: any[][] = [];
+
+  for (const line of lines) {
+    const segments: any[] = [];
+    // Split by **bold** markers
+    const parts = line.split(/(\*\*.*?\*\*|<at user_id="[^"]+"><\/at>)/);
+    for (const part of parts) {
+      if (!part) continue;
+      if (part.startsWith("**") && part.endsWith("**")) {
+        segments.push({
+          tag: "text",
+          text: part.slice(2, -2),
+          style: ["bold"],
+        });
+      } else if (part.startsWith('<at user_id="')) {
+        const userId = part.match(/user_id="([^"]+)"/)?.[1] ?? "";
+        segments.push({ tag: "at", user_id: userId });
+      } else {
+        segments.push({ tag: "text", text: part });
+      }
+    }
+    if (segments.length > 0) {
+      paragraphs.push(segments);
+    }
+  }
+
+  const content = JSON.stringify({ zh_cn: { content: paragraphs } });
+  const body = JSON.stringify({
+    receive_id: chatId,
+    msg_type: "post",
+    content,
+  });
+
+  try {
+    const res = await fetch(
+      `${config.feishu.apiHost}/open-apis/im/v1/messages?receive_id_type=chat_id`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body,
+      }
+    );
+    const data = await res.json();
+    if (data.code !== 0) {
+      console.error(`send rich text: code ${data.code}: ${data.msg}`);
+    }
+  } catch (err: any) {
+    console.error(`send rich text failed: ${err.message}`);
+  }
+}
