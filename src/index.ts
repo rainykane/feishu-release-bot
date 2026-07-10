@@ -351,7 +351,7 @@ async function handleBuildTrigger(
           console.log(`[workflow] Stored run #${run.id} → chat ${cb.open_chat_id}`);
           sendRichText(
             cb.open_chat_id,
-            `<at user_id="${cb.open_id}"></at> 开始构建 ⏳\n**项目:** ${projectName}\n**分支:** ${branch}\n${run.html_url}`
+            `开始构建 ⏳ <at user_id="${cb.open_id}"></at> \n**项目:** ${projectName}\n**分支:** ${branch}\n${run.html_url}`
           );
         }
       } catch (err: any) {
