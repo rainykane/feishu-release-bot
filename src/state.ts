@@ -9,7 +9,9 @@ interface RunEntry {
   openId: string;
   branch: string;
   projectName: string;
+  repo: string;
   modeStr: string;
+  imageTag?: string;
   expiresAt: number;
 }
 
@@ -78,27 +80,31 @@ export function setRunContext(
   openId: string,
   branch: string,
   projectName: string,
-  modeStr: string
+  repo: string,
+  modeStr: string,
+  imageTag?: string
 ): void {
   runStore.set(runId, {
     chatId,
     openId,
     branch,
     projectName,
+    repo,
     modeStr,
+    imageTag,
     expiresAt: Date.now() + RUN_TTL_MS,
   });
 }
 
 export function getRunContext(
   runId: number
-): { chatId: string; openId: string; branch: string; projectName: string; modeStr: string } | null {
+): { chatId: string; openId: string; branch: string; projectName: string; repo: string; modeStr: string; imageTag?: string } | null {
   const entry = runStore.get(runId);
   if (!entry || Date.now() > entry.expiresAt) {
     runStore.delete(runId);
     return null;
   }
-  return { chatId: entry.chatId, openId: entry.openId, branch: entry.branch, projectName: entry.projectName, modeStr: entry.modeStr };
+  return { chatId: entry.chatId, openId: entry.openId, branch: entry.branch, projectName: entry.projectName, repo: entry.repo, modeStr: entry.modeStr, imageTag: entry.imageTag };
 }
 
 export function removeRunContext(runId: number): void {

@@ -1,7 +1,7 @@
 import express from "express";
 import crypto from "crypto";
 import { config } from "./config";
-import { listBranches, triggerWorkflow, getLatestRun } from "./github";
+import { listBranches, triggerWorkflow, getLatestRun, getBranchSha } from "./github";
 import { sendCard, sendText, sendRichText, updateCardByToken } from "./feishu";
 import { buildReleaseCard } from "./card";
 import {
@@ -323,11 +323,39 @@ async function handleBuildTrigger(
 
   const modeStr = buildOnly ? "构建" : "构建与发布";
 
+  // Resolve inputs to determine if this project accepts image_tag
+  const modeKey = buildOnly ? "only_build" : "build_release";
+  const modeInputs =
+    project.inputs?.[modeKey] ??
+    project.inputs?.only_build ??
+    project.inputs?.build_release;
+  const hasImageTag = modeInputs ? "image_tag" in modeInputs : true;
+
+  let imageTag: string | undefined;
+  let overrides: { commit?: string; image_tag?: string } | undefined;
+
+  if (hasImageTag) {
+    try {
+      const fullSha = await getBranchSha(project, branch);
+      const shortSha = fullSha.slice(0, 7);
+      const ts = new Date()
+        .toISOString()
+        .replace(/[-:T]/g, "")
+        .slice(0, 14);
+      imageTag = `${shortSha}-${ts}`;
+      overrides = { commit: fullSha, image_tag: imageTag };
+      console.log(`[workflow] Computed image_tag: ${imageTag}`);
+    } catch (err: any) {
+      console.error(`[workflow] Failed to compute image_tag: ${err.message}`);
+      // Continue without tag — workflow will auto-generate
+    }
+  }
+
   try {
     console.log(
       `[workflow] Dispatching: project=${projectName} branch=${branch} mode=${modeStr}`
     );
-    await triggerWorkflow(project, branch, buildOnly);
+    await triggerWorkflow(project, branch, buildOnly, overrides);
     remove(cb.open_message_id);
 
     res.json({
@@ -336,6 +364,14 @@ async function handleBuildTrigger(
         content: `✅ 已触发构建！${projectName} @ ${branch}`,
       },
     });
+
+    // Refresh card to reset selections for the next user
+    updateCardByToken(
+      cb.token,
+      buildReleaseCard(config.github.projects, [])
+    ).catch((err: any) =>
+      console.error(`[card] Failed to reset card: ${err.message}`)
+    );
 
     console.log(
       `[workflow] ✅ Dispatched: project=${projectName} branch=${branch} mode=${modeStr} user=${cb.open_id}`
@@ -347,7 +383,7 @@ async function handleBuildTrigger(
         await new Promise((r) => setTimeout(r, 6_000));
         const run = await getLatestRun(project, branch);
         if (run) {
-          setRunContext(run.id, cb.open_chat_id, cb.open_id, branch, projectName, modeStr);
+          setRunContext(run.id, cb.open_chat_id, cb.open_id, branch, projectName, project.repo, modeStr, imageTag);
           console.log(`[workflow] Stored run #${run.id} → chat ${cb.open_chat_id}`);
           sendRichText(
             cb.open_chat_id,
@@ -463,12 +499,16 @@ app.post("/webhook", (req, res) => {
         ? `构建失败 ❌ <at user_id="${ctx.openId}"></at>`
         : `构建${conclusion} ⚠️ <at user_id="${ctx.openId}"></at>`;
 
-  const msg = [
+  const msgLines = [
     resultText,
     `**项目:** ${ctx.projectName}`,
     `**分支:** ${ctx.branch}`,
-    run.html_url,
-  ].join("\n");
+  ];
+  if (ctx.imageTag) {
+    msgLines.push(`**镜像:** ghcr.io/timekettle/${ctx.repo}:${ctx.imageTag}`);
+  }
+  msgLines.push(run.html_url);
+  const msg = msgLines.join("\n");
 
   sendRichText(ctx.chatId, msg);
   console.log(

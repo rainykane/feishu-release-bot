@@ -35,10 +35,25 @@ export async function listBranches(project: ProjectConfig): Promise<string[]> {
   return allBranches.map((b) => b.name);
 }
 
+export async function getBranchSha(
+  project: ProjectConfig,
+  branch: string
+): Promise<string> {
+  const url = `${apiBase}/repos/${project.owner}/${project.repo}/git/ref/heads/${encodeURIComponent(branch)}`;
+  const res = await fetch(url, { headers: headers() });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`get branch sha: ${res.status} ${body}`);
+  }
+  const data = (await res.json()) as { object: { sha: string } };
+  return data.object.sha;
+}
+
 export async function triggerWorkflow(
   project: ProjectConfig,
   branch: string,
-  buildOnly: boolean
+  buildOnly: boolean,
+  overrides?: { commit?: string; image_tag?: string }
 ): Promise<void> {
   const url = `${apiBase}/repos/${project.owner}/${project.repo}/actions/workflows/${project.workflowId}/dispatches`;
 
@@ -54,6 +69,14 @@ export async function triggerWorkflow(
         commit: "",
         image_tag: "",
       };
+
+  // Apply overrides for commit / image_tag when provided
+  if (overrides?.commit && "commit" in inputs) {
+    inputs.commit = overrides.commit;
+  }
+  if (overrides?.image_tag && "image_tag" in inputs) {
+    inputs.image_tag = overrides.image_tag;
+  }
 
   const body = JSON.stringify({ ref: branch, inputs });
 
